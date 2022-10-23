@@ -1,4 +1,4 @@
-Updated version of airspyhf_rx which support output to localhost on a specified port.
+Updated version of airspyhf_rx which supports output to localhost on a specified port.
 
 To build:
 
