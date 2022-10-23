@@ -1,65 +1,25 @@
-# Copyright 2012 Jared Boone
-# Copyright 2013/2014 Benjamin Vernoux
-# Copyright 2018 Andrea Montefusco IW0HDV <andrew@montefusco.com>
+cmake_minimum_required(VERSION 3.10.2)
 
-# This file is part of AirSpy (based on HackRF project).
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2, or (at your option)
-# any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; see the file COPYING.  If not, write to
-# the Free Software Foundation, Inc., 51 Franklin Street,
-# Boston, MA 02110-1301, USA.
-#
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pthread")
 
-# Based heavily upon the libftdi cmake setup.
+project(airspyhf_rx_udp)
 
-set(INSTALL_DEFAULT_BINDIR "bin" CACHE STRING "Appended to CMAKE_INSTALL_PREFIX")
+include_directories(airspyhf_rx_udp
+    /usr/include/libairspyhf)
 
-if(MSVC)
-add_library(libgetopt_static STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/../getopt/getopt.c
+add_executable(airspyhf_rx_udp 
+    airspyhf_rx.c)
+
+find_package(MAVSDK REQUIRED)
+
+target_link_libraries(airspyhf_rx_udp
+    airspyhf
+    -lm
 )
-endif()
 
-add_executable(airspyhf_lib_version airspyhf_lib_version.c)
-install(TARGETS airspyhf_lib_version RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
+add_compile_options(airspyhf_rx_udp PRIVATE -g)
+add_link_options(airspyhf_rx_udp PRIVATE -g)
 
-add_executable(airspyhf_info airspyhf_info.c)
-install(TARGETS airspyhf_info RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
-
-add_executable(airspyhf_rx airspyhf_rx.c)
-install(TARGETS airspyhf_rx RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
-
-add_executable(airspyhf_gpio airspyhf_gpio.c)
-install(TARGETS airspyhf_gpio RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
-
-add_executable(airspyhf_calibrate airspyhf_calibrate.c)
-install(TARGETS airspyhf_calibrate RUNTIME DESTINATION ${INSTALL_DEFAULT_BINDIR})
-
-if(NOT libairspyhf_SOURCE_DIR)
-include_directories(${LIBAIRSPYHF_INCLUDE_DIR})
-LIST(APPEND TOOLS_LINK_LIBS ${LIBAIRSPYHF_LIBRARIES})
-else()
-LIST(APPEND TOOLS_LINK_LIBS airspyhf)
-endif()
-
-if(MSVC)
-LIST(APPEND TOOLS_LINK_LIBS libgetopt_static)
-endif()
-
-LIST(APPEND TOOLS_LINK_LIBS -lm)
-
-target_link_libraries(airspyhf_lib_version ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_info ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_rx ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_gpio ${TOOLS_LINK_LIBS})
-target_link_libraries(airspyhf_calibrate ${TOOLS_LINK_LIBS})
+add_compile_options(airspyhf_rx_udp PRIVATE -Wall -Wextra)

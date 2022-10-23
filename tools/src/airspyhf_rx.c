@@ -34,6 +34,10 @@
 #include <errno.h>
 #include <limits.h>
 
+#include <memory.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
 #include <airspyhf.h>
 
 #if !defined __cplusplus
@@ -94,6 +98,40 @@ int gettimeofday(struct timeval *tv, void* ignored)
 #define FD_BUFFER_SIZE (16*1024)
 #define DEFAULT_FREQ_HZ (7100000ul) /* 7.1 MHz */
 #define SAMPLES_TO_XFER_MAX_U64 (0x8000000000000000ull) /* Max value */
+
+int udp_send_socket = 0;
+
+int udpSenderSetup(int ipPort)
+{
+    int fdSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fdSocket < 0 ) {
+        printf("Sender socket creation failed. Port: %d. Error: %s\n", ipPort, strerror(errno));
+        exit(0);        
+    } 
+
+    struct sockaddr_in  servaddr;   
+
+    memset(&servaddr, 0, sizeof(servaddr)); 
+        
+    servaddr.sin_family = AF_INET; 
+    servaddr.sin_port = htons(ipPort); 
+    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    if (connect(fdSocket, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        printf("Sender socket connect failed. Port: %d. Error: %s\n", ipPort, strerror(errno));
+        close(fdSocket);
+        exit(0);        
+    }
+
+    printf("udpSendSetup success\n");
+
+    return fdSocket;
+}
+
+int udpSenderSend(int fdSocket, uint8_t* buffer, size_t bufferSize)
+{
+    return send(fdSocket, buffer, bufferSize, 0);
+}
 
 /* WAVE or RIFF WAVE file format containing data for AirSpy compatible with SDR# Wav IQ file */
 typedef struct
@@ -304,6 +342,16 @@ int rx_callback(airspyhf_transfer_t* transfer)
 	struct timeval time_now;
 	float time_difference, rate;
 
+	if (udp_send_socket) {
+		// #sample * float size * I+Q
+		bytes_to_write = transfer->sample_count * 4 * 2;
+		pt_rx_buffer = transfer->samples;
+
+		udpSenderSend(udp_send_socket, pt_rx_buffer, bytes_to_write);
+
+		return 0;
+	}
+
 	if( fd ) {
 		// #sample * float size * I+Q
 		bytes_to_write = transfer->sample_count * 4 * 2;
@@ -362,6 +410,8 @@ static void usage(void)
 	"\t-r <filename>\t\tReceive data into the file;\n"
 	"\t\t\t\tstdout emits values on standard output\n"
 
+	"\t-u <port>\t\tSend data over udp localhost on specified port;\n"
+
 	"\t-s <serial number>\tOpen device with specified 64bits serial number\n"
 
 	"\t-f <frequency>\t\tSet frequency in MHz between 9 kHz - 31 MHz or 60 - 260 MHz\n"
@@ -402,6 +452,9 @@ sighandler(int signum)
 void sigint_callback_handler(int signum)
 {
 	fprintf(stdout, "Caught signal %d\n", signum);
+	if (udp_send_socket) {
+		exit(0);
+	}
 	do_exit = true;
 }
 #endif
@@ -430,6 +483,8 @@ int main(int argc, char** argv)
 	uint32_t sample_rate_val = 0;
 	bool serial_number = false;
 	uint64_t serial_number_val;
+	bool udp_send = false;
+	uint32_t udp_send_port = 0;
 
 	bool hf_agc = true;
 	bool hf_agc_threshold = false; // false = low, true = high
@@ -438,11 +493,16 @@ int main(int argc, char** argv)
 
 	bool do_not_use_manual_commands = false;
 
-	while( (opt = getopt(argc, argv, "r:ws:f:a:n:g:l:t:m:dhz")) != EOF )
+	while( (opt = getopt(argc, argv, "u:r:ws:f:a:n:g:l:t:m:dhz")) != EOF )
 	{
 		result = AIRSPYHF_SUCCESS;
 		switch( opt )
 		{
+			case 'u':
+				udp_send = true;
+				result = parse_u32(optarg, &udp_send_port);
+			break;
+
 			case 'r':
 				receive = true;
 				path = optarg;
@@ -567,8 +627,8 @@ int main(int argc, char** argv)
 		fprintf(stderr, "Receive wav file: [%s]\n", path);
 	}
 
-	if( path == 0 ) {
-		fprintf(stderr, "error: you shall specify at least -r <with filename> or -w option\n");
+	if( path == 0 && !udp_send) {
+		fprintf(stderr, "error: you shall specify at least -r <with filename> or -w/-u option\n");
 		goto exit_usage;
 	}
 
@@ -693,24 +753,29 @@ int main(int argc, char** argv)
 	}
 
 	// output file management
-	if (strcmp (path, "stdout") == 0) {
-		fd = stdout;
-	} else {
-		if( !(fd = fopen(path, "wb")) ) {
-			perror (path);
+	if (receive) {
+		if (strcmp (path, "stdout") == 0) {
+			fd = stdout;
+		} else {
+			if( !(fd = fopen(path, "wb")) ) {
+				perror (path);
+				goto exit_failure;
+			}
+		}
+
+		/* Change fd buffer to have bigger one to store data to file */
+		if( setvbuf(fd , NULL , _IOFBF , FD_BUFFER_SIZE) != 0 ) {
+			perror("setvbuf() failed:");
 			goto exit_failure;
 		}
-	}
-
-	/* Change fd buffer to have bigger one to store data to file */
-	if( setvbuf(fd , NULL , _IOFBF , FD_BUFFER_SIZE) != 0 ) {
-		perror("setvbuf() failed:");
-		goto exit_failure;
 	}
 
 	/* Write Wav header */
 	if( receive_wav ) fwrite(&wave_file_hdr, 1, sizeof(t_wav_file_hdr), fd);
 
+	if (udp_send) {
+		udp_send_socket = udpSenderSetup(udp_send_port);
+	}
 
 #ifdef _MSC_VER
 	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
@@ -722,6 +787,7 @@ int main(int argc, char** argv)
 	signal(SIGTERM, &sigint_callback_handler);
 	signal(SIGABRT, &sigint_callback_handler);
 #endif
+
 
 	if( airspyhf_start(device, rx_callback, NULL) != AIRSPYHF_SUCCESS ) {
 		fprintf(stderr, "airspyhf_start() failed.\n");
