@@ -12,8 +12,6 @@ include_directories(airspyhf_rx_udp
 add_executable(airspyhf_rx_udp 
     airspyhf_rx.c)
 
-find_package(MAVSDK REQUIRED)
-
 target_link_libraries(airspyhf_rx_udp
     airspyhf
     -lm
