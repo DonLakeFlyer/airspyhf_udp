@@ -100,6 +100,7 @@ int gettimeofday(struct timeval *tv, void* ignored)
 #define SAMPLES_TO_XFER_MAX_U64 (0x8000000000000000ull) /* Max value */
 
 int udp_send_socket = 0;
+uint32_t sendIndex = 0;
 
 int udpSenderSetup(int ipPort)
 {
@@ -130,6 +131,14 @@ int udpSenderSetup(int ipPort)
 
 int udpSenderSend(int fdSocket, uint8_t* buffer, size_t bufferSize)
 {
+	uint32_t sendBuffer[4096];
+
+	assert(bufferSize + (sizeof(float) * 2)< sizeof(sendBuffer));
+
+	sendBuffer[0] = sendIndex++;
+	sendBuffer[1] = 0;
+	memcpy(&sendBuffer[2], buffer, bufferSize)
+
     return send(fdSocket, buffer, bufferSize, 0);
 }
 
