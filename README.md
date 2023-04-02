@@ -2,13 +2,14 @@ Updated version of airspyhf_rx which supports output to localhost on a specified
 
 To build:
 
-`git clone https://github.com/airspy/airspyhf_udp.git`
-
-`cd airspyhf_udp/tools/src`
-
-`cmake -Bbuild -H.`
-
-`cmake --build build`
+```
+git clone https://github.com/airspy/airspyhf_udp.git
+cd airspyhf-udp
+make
+cd build
+sudo make install
+sudo ldconfig
+```
 
 To run:
 
